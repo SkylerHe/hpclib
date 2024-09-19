@@ -50,7 +50,7 @@ __copyright__ = 'Copyright 2024, University of Richmond'
 __credits__ = None
 __version__ = 0.1
 __maintainer__ = 'George Flanagin'
-__email__ = f'gflanagin@richmond.edu'
+__email__ = 'gflanagin@richmond.edu'
 __status__ = 'in progress'
 __license__ = 'MIT'
 
@@ -79,7 +79,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', type=str, default="",
         help="Output file name")
     
-    parser.add_argument('-z', '--zap', type='store_true', 
+    parser.add_argument('-z', '--zap', action='store_true', 
         help="Remove old log file and create a new one.")
 
     myargs = parser.parse_args()

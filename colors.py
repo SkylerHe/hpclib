@@ -18,5 +18,3 @@ units = {
     }
 
 
-def DoF(dist:float, f:float, n:float, unit:str='cm'):
-    return 2 * units[unit] * dist * dist * n * 0.00003 / (f/1000) 

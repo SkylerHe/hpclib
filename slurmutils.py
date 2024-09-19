@@ -80,6 +80,25 @@ def hms_to_hours(hms:str) -> float:
 
     return int(d)*24 + int(h) + int(m)/60 + int(s)/3600
 
+def hms_to_hours(hms:str) -> float:
+    """
+    Convert a slurm time like 2-12:00:00 to
+    a number of hours.
+    """
+
+    try:
+        h, m, s = hms.split(':')
+    except Exception as e:
+        if hms == 'infinite': return 365*24
+        return 0
+
+    try:
+        d, h = h.split('-')
+    except Exception as e:
+        d = 0
+
+    return int(d)*24 + int(h) + int(m)/60 + int(s)/3600
+
 
 def hours_to_hms(h:float) -> str:
     """
@@ -90,8 +109,6 @@ def hours_to_hms(h:float) -> str:
     h -= days * 24
     hours = int(h)
     h -= hours
-    minutes = int(h * 60)
-    h -= minutes/60
     seconds = int(h*60)
 
     return ( f"{days}-{hours:02}:{minutes:02}:{seconds:02}" 

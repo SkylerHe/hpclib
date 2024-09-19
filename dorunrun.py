@@ -1,68 +1,89 @@
 # -*- coding: utf-8 -*-
-"""
-This file contains conveniences for our slurm development efforts.
-"""
-
 import typing
 from   typing import *
 
-min_py = (3, 8)
-
 ###
-# Standard imports.
+# Standard imports, starting with os and sys
 ###
-
-import enum
+min_py = (3, 11)
 import os
 import sys
 if sys.version_info < min_py:
     print(f"This program requires Python {min_py[0]}.{min_py[1]}, or higher.")
     sys.exit(os.EX_SOFTWARE)
 
+###
+# Other standard distro imports
+###
+import argparse
+from   collections.abc import *
+import contextlib
+import getpass
+import logging
+
+###
+# Installed libraries like numpy, pandas, paramiko
+###
+
+###
+# From hpclib
+###
+import linuxutils
+from   urdecorators import trap
+from   urlogger import URLogger
+
+###
+# imports and objects that were written for this project.
+###
+import enum
 import math
 import shlex
 import subprocess
+###
+# Global objects
+###
+mynetid = getpass.getuser()
+logger = None
 
-from   urdecorators import trap
-
+###
 # Credits
+###
 __author__ = 'George Flanagin'
-__copyright__ = 'Copyright 2021'
+__copyright__ = 'Copyright 2024, University of Richmond'
 __credits__ = None
-__version__ = str(math.pi**2)[:5]
-__maintainer__ = 'George Flanagin'
-__email__ = ['me+ur@georgeflanagin.com', 'gflanagin@richmond.edu']
-__status__ = 'Teaching example'
+__version__ = 0.1
+__maintainer__ = 'George Flanagin, Skyler He'
+__email__ = 'gflanagin@richmond.edu, skyler.he@richmond.edu'
+__status__ = 'in progress'
 __license__ = 'MIT'
 
-@trap
+
 def dorunrun(command:Union[str, list],
     timeout:int=None,
-    return_datatype:type=bool,
-    OK:set={0}
-    ) -> Union[str, bool, int, dict]:
+    return_datatype:type=dict) -> Union[str, bool, int, dict]:
     """
-    A wrapper around (almost) all the complexities of running child 
+    A wrapper around (almost) all the complexities of running child
         processes.
-    command -- a string, or a list of strings, that constitute the
-        commonsense definition of the command to be attemped. 
-    timeout -- generally, we don't
-    return_datatype -- this argument corresponds to the item 
-        the caller wants returned. It can be one of these values.
-
-            bool : True if the subprocess exited with a code in
-                    the set containing "OK" values. 
-            int  : the exit code itself.
-            str  : the stdout of the child process.
-            dict : everything as a dict of key-value pairs.
-    OK -- a set containing exit codes for the command that are 
-        construed to be acceptable. The default is a set containing
-        zero, {0}, which is what is meant in most, but not all cases.
-
-    returns -- a value corresponding to the requested info.
+    
+    Parameters:
+    -----------
+    command: A string, or a list of strings, 
+             that constitute the commonsense definition of the command to be attemped.
+    timeout: Generally, we don't
+    return_datatype: This argument corresponds to the item the caller wants returned. 
+                     It can be one of these values:
+        
+        - bool : True if the subprocess exited with code 0.
+        - int  : the exit code itself.
+        - str  : the stdout of the child process.
+        - dict : everything as a dict of key-value pairs.
+        
+        The default data type is dict
+    ----------
+    Returns: A value corresponding to the requested info.
     """
 
-    # If return_datatype is not in the list, use dict. Note 
+    # If return_datatype is not in the list, use dict. Note
     # that the next statement covers None, as well.
     return_datatype = dict if return_datatype not in (int, str, bool) else return_datatype
 
@@ -78,16 +99,15 @@ def dorunrun(command:Union[str, list],
         raise Exception(f"Bad argument type to dorunrun: {command=}")
 
     try:
-        result = subprocess.run(command, 
-            timeout=timeout, 
+        result = subprocess.run(command,
+            timeout=timeout,
             input="",
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE, 
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             shell=False)
-
         code = result.returncode
-        b_code = code in OK
+        b_code = code == 0
         i_code = code
         s = result.stdout[:-1] if result.stdout.endswith('\n') else result.stdout
         e = result.stderr[:-1] if result.stderr.endswith('\n') else result.stderr
@@ -99,24 +119,23 @@ def dorunrun(command:Union[str, list],
         elif return_datatype is bool:
             return b_code
         else:
-            return {"OK":b_code, 
-                    "code":i_code, 
-                    "name":ExitCode(i_code).name, 
-                    "stdout":s, 
+            return {"OK":b_code,
+                    "code":i_code,
+                    "name":ExitCode(i_code).name,
+                    "stdout":s,
                     "stderr":e}
-        
+
     except subprocess.TimeoutExpired as e:
         print(f"Process exceeded time limit at {timeout} seconds.")
         print(f"Command was {command}")
-        return {"OK":False, 
-                "code":255, 
-                "name":ExitCode(255).name, 
-                "stdout":"", 
+        return {"OK":False,
+                "code":255,
+                "name":ExitCode(255).name,
+                "stdout":"",
                 "stderr":""}
 
     except Exception as e:
         raise Exception(f"Unexpected error: {str(e)}")
-
 
 class FakingIt(enum.EnumMeta):
 
@@ -136,7 +155,7 @@ class FakingIt(enum.EnumMeta):
 
 class ExitCode(enum.IntEnum, metaclass=FakingIt):
     """
-    This is a comprehensive list of exit codes in Linux, and it 
+    This is a comprehensive list of exit codes in Linux, and it
     includes four utility functions. Suppose x is an integer:
 
         x in ExitCode     # is x a valid value?
@@ -144,7 +163,6 @@ class ExitCode(enum.IntEnum, metaclass=FakingIt):
         x.is_signal       # True if the value is a "killed by Linux signal"
         x.signal          # Which signal, or zero.
     """
-
     @property
     def OK(self) -> bool:
         return self is ExitCode.SUCCESS
@@ -153,7 +171,7 @@ class ExitCode(enum.IntEnum, metaclass=FakingIt):
     def is_signal(self) -> bool:
         return ExitCode.KILLEDBYMAX > self > ExitCode.KILLEDBYSIGNAL
 
-    @property 
+    @property
     def signal(self) -> int:
         return self % ExitCode.KILLEDBYSIGNAL if self.is_signal else 0
 
@@ -178,7 +196,7 @@ class ExitCode(enum.IntEnum, metaclass=FakingIt):
 
     ######
     # Code 64 is also the usage error, and the least number
-    # that has reserved meanings, and nothing above here 
+    # that has reserved meanings, and nothing above here
     # should be used by a user program.
     ######
     BASEVALUE = 64
@@ -241,24 +259,36 @@ class ExitCode(enum.IntEnum, metaclass=FakingIt):
     # Nonsense argument to exit()
     OUTOFRANGE = 255
 
-
 if __name__ == '__main__':
-    import getpass
-    mynetid = getpass.getuser()
 
-    # we know this source file exists, so let's use it.
-    filename = __file__
-    print(dorunrun(f'rm -f {filename}.new', return_datatype=dict))
-    print(dorunrun(f'cp {filename} {filename}.new', return_datatype=int))
-
-    # most computers are setup so that you can ssh as yourself to localhost. 
-    short_filename = os.path.basename(filename)
-    print(dorunrun(f"""
-        scp {mynetid}@localhost:{filename} /tmp/{short_filename}
-        """, 
-        return_datatype=dict))
-    print(dorunrun(f"""
-        ssh -o ConnectTimeout=3 -i ~/.ssh/id_rsa root@alexis "ls -lrt"
-        """,
-        return_datatype=dict))
+    here       = os.getcwd()
+    progname   = os.path.basename(__file__)[:-3]
+    configfile = f"{here}/{progname}.toml"
+    logfile    = f"{here}/{progname}.log"
+    lockfile   = f"{here}/{progname}.lock"
     
+    parser = argparse.ArgumentParser(prog="dorunrun", 
+        description="What dorunrun does, dorunrun does best.")
+
+    parser.add_argument('--loglevel', type=int, 
+        choices=range(logging.FATAL, logging.NOTSET, -10),
+        default=logging.DEBUG,
+        help=f"Logging level, defaults to {logging.DEBUG}")
+
+    parser.add_argument('-o', '--output', type=str, default="",
+        help="Output file name")
+    
+    parser.add_argument('-z', '--zap', action='store_true', 
+        help="Remove old log file and create a new one.")
+
+    myargs = parser.parse_args()
+    logger = URLogger(logfile=logfile, level=myargs.loglevel)
+
+    try:
+        outfile = sys.stdout if not myargs.output else open(myargs.output, 'w')
+        with contextlib.redirect_stdout(outfile):
+            sys.exit(globals()[f"{progname}_main"](myargs))
+
+    except Exception as e:
+        print(f"Escaped or re-raised exception: {e}")
+

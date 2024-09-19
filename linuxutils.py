@@ -1,14 +1,42 @@
 # -*- coding: utf-8 -*-
-""" Generic, bare functions, not a part of any object or service. """
-
-# Added for Python 3.5+
 import typing
-from typing import *
+from   typing import *
 
+###
+# Standard imports, starting with os and sys
+###
+min_py = (3, 11)
+import os
+import sys
+if sys.version_info < min_py:
+    print(f"This program requires Python {min_py[0]}.{min_py[1]}, or higher.")
+    sys.exit(os.EX_SOFTWARE)
+
+###
+# Other standard distro imports
+###
 import argparse
+from   collections.abc import *
+import contextlib
+import getpass
+import logging
+
+###
+# Installed libraries like numpy, pandas, paramiko
+###
+
+###
+# From hpclib
+###
+import linuxutils
+from   urdecorators import trap
+from   urlogger import URLogger
+
+###
+# imports and objects that were written for this project.
+###
 import atexit
 import collections
-from   collections.abc import Iterable
 import copy
 from   ctypes import cdll, byref, create_string_buffer
 import datetime
@@ -19,7 +47,6 @@ import fcntl
 import glob
 import grp
 import inspect
-import os
 import platform
 import pwd
 import re
@@ -27,31 +54,27 @@ import signal
 import socket
 import string
 import subprocess
-import sys
 import threading
 import time
 import traceback
-try:
-    libc = cdll.LoadLibrary('libc.so.6')
-except OSError as e:
-    libc = None
-    
-# Credits
-__longname__ = "University of Richmond"
-__acronym__ = " UR "
-__author__ = 'George Flanagin'
-__copyright__ = 'Copyright 2015, University of Richmond'
-__credits__ = None
-__version__ = '0.1'
-__maintainer__ = 'George Flanagin'
-__email__ = 'gflanagin@richmond.edu'
-__status__ = 'Prototype'
+###
+# Global objects
+###
+mynetid = getpass.getuser()
+logger = None
 
+###
+# Credits
+###
+__author__ = 'George Flanagin'
+__copyright__ = 'Copyright 2024, University of Richmond'
+__credits__ = None
+__version__ = 0.1
+__maintainer__ = 'George Flanagin, Skyler He'
+__email__ = 'gflanagin@richmond.edu, skyler.he@richmond.edu'
+__status__ = 'in progress'
 __license__ = 'MIT'
 
-###
-# B
-###
 def bookmark() -> list:
     """
     Return a list of function calls that arrived at this
@@ -61,16 +84,16 @@ def bookmark() -> list:
     bookmark()'s list does not include itself, therefore the
     range() statement starts at 1 rather than zero. Note that
     if you are printing the list, you probably don't care
-    about the print() function, so you should 
+    about the print() function, so you should
 
     print(bookmark()[1:])
     """
-        
+
     stak = inspect.stack()
-    return [ stak[i].function 
-        for i in range(1, len(stak)) 
+    return [ stak[i].function
+        for i in range(1, len(stak))
         if stak[i].function not in ('wrapper', '<module>', '__call__') ]
-        
+
 
 byte_remap = {
     'PB':'P',
@@ -112,11 +135,17 @@ def byte_scale(i:int, key:str='X') -> str:
             return f"Error: byte_scale({i}, {k})"
 
 def bytes2human(n:int) -> str:
-    # http://code.activestate.com/recipes/578019
-    # >>> bytes2human(10000)
-    # '9.8K'
-    # >>> bytes2human(100001221)
-    # '95.4M'
+    """
+    Convert a byte count to a human-readable format (e.g., KB, MB, GB).     Returns the formatted string.
+    
+    Examples: 
+        http://code.activestate.com/recipes/578019
+        bytes2human(10000)
+        '9.8K'
+        bytes2human(100001221)
+        '95.4M'
+    """
+
     symbols = ('K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y')
     prefix = {}
     for i, s in enumerate(symbols):
@@ -127,12 +156,11 @@ def bytes2human(n:int) -> str:
             return '%.1f%s' % (value, s)
     return "%sB" % n
 
-
 def byte_size(s:str) -> int:
     """
     Takes a string like '20K' and changes it to 20*1024.
     Note that it accepts '20k' or '20K'
-    """ 
+    """
     if not s: return 0
 
     # Take care of the case where it is KB rather than K, etc.
@@ -153,8 +181,8 @@ def byte_size(s:str) -> int:
 
 def coerce(s:str) -> Union[int, float, datetime.datetime, tuple, str]:
     """
-    Examine a shred of str data, and see if we can make something 
-    more structured from it. 
+    Examine a shred of str data, and see if we can make something
+    more structured from it.
     """
     try:
         return int(s)
@@ -178,11 +206,11 @@ def coerce(s:str) -> Union[int, float, datetime.datetime, tuple, str]:
             pass
 
     return s
-        
+
 
 def columns() -> int:
     """
-    If we are in a console window, return the number of columns. 
+    If we are in a console window, return the number of columns.
     Return zero if we cannot figure it out, or the request fails.
     """
     try:
@@ -190,11 +218,14 @@ def columns() -> int:
     except:
         return 0
 
-
 ###
 # There is no standard way to do this, particularly with virtualization.
 ###
 def cpucounter() -> int:
+    """
+    Return the number of CPU cores available on the current system, 
+    based on the operating system.
+    """
     names = {
         'macOS': lambda : os.cpu_count(),
         'Linux': lambda : len(os.sched_getaffinity(0)),
@@ -206,7 +237,6 @@ def cpucounter() -> int:
 ###
 # D
 ###
-
 def daemonize_me() -> bool:
     """
     Turn this program into a daemon, if it is not already one.
@@ -250,7 +280,7 @@ def dump_cmdline(args:argparse.ArgumentParser, return_it:bool=False, split_it:bo
     for _ in sorted(vars(args).items()):
         opt_string += f"{sep}--"+ _[0].replace("_","-") + " " + str(_[1])
     if not return_it: print(opt_string + "\n")
-    
+
     return opt_string if return_it else ""
 
 
@@ -263,7 +293,7 @@ def explain(code:int) -> str:
     Lookup the os.EX_* codes.
     """
     codes = { _:getattr(os, _) for _ in dir(os) if _.startswith('EX_') }
-    names = {v:k for k, v in codes.items()}    
+    names = {v:k for k, v in codes.items()}
     return names.get(code, 'No explanation for {}'.format(code))
 
 
@@ -274,11 +304,12 @@ def explain(code:int) -> str:
 ####
 # G
 ####
+
 def getallgroups():
     """
-    We only care about the ones over 2000.
+    Yield the names of all groups available on the system
     """
-    yield from ( _.gr_name for _ in grp.getgrall() if _.gr_gid > 2000 )
+    yield from ( _.gr_name for _ in grp.getgrall())
 
 
 def getgroups(u:str) -> tuple:
@@ -296,6 +327,14 @@ def getgroups(u:str) -> tuple:
 
 
 def getproctitle() -> str:
+    """
+    Retrieve the current process title.
+
+    This function uses the libc `prctl` system call to fetch the title of the current process.
+    The title is stored in a buffer, which is then decoded and returned as a UTF-8 string.
+
+    If an error occurs during retrieval, an empty string is returned.
+    """
     global libc
     try:
         buff = create_string_buffer(128)
@@ -305,12 +344,11 @@ def getproctitle() -> str:
     except Exception as e:
         return ""
 
-
 default_group = 'people'
 def getusers_in_group(g:str) -> tuple:
     """
     Linux's group registry does not know about the default group
-    that is kept in LDAP. 
+    that is kept in LDAP.
     TODO: This function requires some cleanup before release.
     """
 
@@ -322,87 +360,37 @@ def getusers_in_group(g:str) -> tuple:
     except KeyError as e:
         return tuple()
 
-
 def group_exists(g:str) -> bool:
+    """
+    Check if a group with the given name exists on the system. Returns True if it exists, False otherwise.
+    """
     try:
         grp.getgrnam(g)
         return True
     except KeyError as e:
-        return False    
+        return False
 
 ####
 # H
 ####
 
-def hms_to_hours(hms:str) -> float:
-    """
-    Convert a slurm time like 2-12:00:00 to
-    a number of hours.
-    """
-
-    try:
-        h, m, s = hms.split(':')
-    except Exception as e:
-        if hms == 'infinite': return 365*24
-        return 0
-
-    try:
-        d, h = h.split('-')
-    except Exception as e:
-        d = 0
-
-    return int(d)*24 + int(h) + int(m)/60 + int(s)/3600
-
-
-def hours_to_hms(h:float) -> str:
-    """
-    Convert a number of hours to "SLURM time."
-    """
-
-    days = int(h / 24)
-    h -= days * 24
-    hours = int(h)
-    h -= hours
-    minutes = int(h * 60)
-    h -= minutes/60
-    seconds = int(h*60)
-
-    return ( f"{hours:02}:{minutes:02}:{seconds:02}"
-        if h < 24 else
-        f"{days}-{hours:02}:{minutes:02}:{seconds:02}" )
-
-
-
 ####
 # I
 ####
-def is_faculty(netid:str) -> bool:
-    try:
-        return is_valid_netid(netid) and not netid[2] in string.digits
-    except Exception as e:
-        return False
-
-
-def is_student(netid:str) -> bool:
-    return True
-    try: 
-        return is_valid_netid(netid) and netid[2] in string.digits
-    except Exception as e:
-        return False
-
-
-def is_valid_netid(netid:str) -> bool:
-    try:
-        return len(getgroups(netid))!=0
-    except Exception as e:
-            return False
-
 
 def iso_time(seconds:int) -> str:
+    """
+    Convert a time in seconds since the epoch to an ISO-formatted string (e.g., 'YYYY-MM-DD HH:MM'). 
+    """
+
     return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(seconds))
 
 
 def iso_seconds(timestring:str) -> int:
+    """
+    Convert an ISO-formatted time string to seconds since the epoch
+    """
+
     dt = datetime.datetime.strptime(timestring, '%Y-%m-%dT%H:%M')
     return dt.strftime("%s")
 
@@ -441,8 +429,7 @@ class LockFile:
             raise RuntimeError("Another instance is already running.")
 
         return self
-
-
+    
     def __exit__(self, exception_type:type, exception_value:object, traceback:object) -> bool:
         try:
             fcntl.flock(self.lockfile, fcntl.LOCK_UN)
@@ -450,7 +437,7 @@ class LockFile:
 
         finally:
             os.unlink(self.lockfile_name)
-            
+
 
     def __int__(self) -> int:
         try:
@@ -462,6 +449,7 @@ class LockFile:
         except:
             # This really should not happen ...
             return -1
+
 
 
 ####
@@ -489,8 +477,11 @@ def mygroups() -> Tuple[str]:
 ####
 # N
 ####
-
 def now_as_seconds() -> int:
+    """
+    Return the current time as seconds since the epoch using a high-resolution clock.
+    """
+
     return time.clock_gettime(0)
 
 
@@ -509,47 +500,50 @@ def parse_proc(pid:int) -> dict:
     as a dict with keys set to lower without the "vm" in front,
     and the values converted to ints.
     """
-    lines = []
-    proc_file = '/proc/'+str(pid)+"/status"
-    with open(proc_file, 'r') as f:
-        rows = f.read().split("\n")
+    try:
+        with open(f'/proc/{pid}/status', 'r') as f:
+            rows = f.read().splitlines()
+    except (FileNotFoundError, PermissionError):
+        return None
 
-    if not len(rows): return None
+    if not rows: return None
 
-    interesting_keys = ['VmSize', 'VmLck', 'VmHWM', 
-            'VmRSS', 'VmData', 'VmStk', 'VmExe', 'VmSwap' ]
+    interesting_keys = ['VmSize', 'VmLck', 'VmHWM', 'VmRSS', 
+                        'VmData', 'VmStk', 'VmExe', 'VmSwap' ]
 
-    kv = {}
-    for row in rows:
-        if ":" in row:
-            k, v = row.split(":", 1)
-        else:
-            continue
-        if k in interesting_keys: 
-            kv[k.lower()[2:]] = int(v.split()[0])
-
+    kv = {k.lower()[2:]: int(v.split()[0])
+          for row in rows
+          if ":" in row
+          for k, v in [row.split(":", 1)]
+          if k in interesting_keys}
     return kv
-
-
-
 
 
 def pids_of(process_name:str, anywhere:Any=None) -> list:
     """
-    Canøe is likely to have more than one background process running, 
+    Canøe is likely to have more than one background process running,
     and we will only know the first bit of the name, i.e., "canoed".
     This function gets a list of matching process IDs.
 
-    process_name -- a text shred containing the bit you want 
+    process_name -- a text shred containing the bit you want
         to find.
 
     anywhere -- unused argument, maintained for backward compatibility.
 
-    returns -- a possibly empty list of ints containing the pids 
+    returns -- a possibly empty list of ints containing the pids
         whose names match the text shred.
     """
-    results = subprocess.run(['pgrep','-u', 'canoe'], stdout=subprocess.PIPE)
-    return [ int(_) for _ in results.stdout.decode('utf-8').split('\n') if _ ]
+    if anywhere:
+        # Match process name anywhere in the command line
+        cmd = f'pgrep -f {process_name}'
+    else:
+        # Match exact process name
+        cmd = f'pgrep {process_name}'
+
+    # Execute the command
+    results = subprocess.run(cmd, stdout=subprocess.PIPE)
+    
+    return [int(_) for _ in results.stdout.decode('utf-8').split('\n') if _ ]
 
 
 ####
@@ -563,7 +557,6 @@ def script_driven() -> bool:
 
     mode = os.fstat(0).st_mode
     return True if stat.S_ISFIFO(mode) or stat.S_ISREG(mode) else False
-
 
 def setproctitle(s:str) -> str:
     """
@@ -586,93 +579,14 @@ def setproctitle(s:str) -> str:
 
 def signal_name(i:int) -> str:
     """
-    Improve readability of signal processing. 
+    Improve readability of signal processing.
     """
     try:
         return f"{signal.Signals(i).name} ({signal.strsignal(i)})"
     except:
         return f"unnamed signal {i}"
 
-
-class SloppyDict: pass
-def sloppy(o:object) -> SloppyDict:
-    return o if isinstance(o, SloppyDict) else SloppyDict(o)
-
-
-class SloppyDict(dict):
-    """
-    Make a dict into an object for notational convenience.
-    """
-    def __getattr__(self, k:str) -> object:
-        if k in self: return self[k]
-        raise AttributeError("No element named {}".format(k))
-
-    def __setattr__(self, k:str, v:object) -> None:
-        self[k] = v
-
-    def __delattr__(self, k:str) -> None:
-        if k in self: del self[k]
-        else: raise AttributeError("No element named {}".format(k))
-
-    def reorder(self, some_keys:list=[], self_assign:bool=True) -> SloppyDict:
-        new_data = SloppyDict()
-        unmoved_keys = sorted(list(self.keys()))
-
-        for k in some_keys:
-            try:
-                new_data[k] = self[k]
-                unmoved_keys.remove(k)
-            except KeyError as e:
-                pass
-
-        for k in unmoved_keys:
-            new_data[k] = self[k]
-
-        if self_assign: 
-            self = new_data
-            return self
-        else:
-            return copy.deepcopy(new_data)       
-
-
-def deepsloppy(o:dict) -> Union[SloppyDict, object]:
-    """
-    Multi level slop.
-    """
-    if isinstance(o, dict): 
-        o = SloppyDict(o)
-        for k, v in o.items():
-            o[k] = deepsloppy(v)
-
-    elif isinstance(o, list):
-        for i, _ in enumerate(o):
-            o[i] = deepsloppy(_)
-
-    else:
-        pass
-
-    return o
-
-
-class SloppyTree(dict):
-    """
-    Like SloppyDict(), only worse -- much worse.
-    """
-    def __missing__(self, k:str) -> object:
-        self[k] = SloppyTree()
-        return self[k]
-
-    def __getattr__(self, k:str) -> object:
-        return self[k]
-
-    def __setattr__(self, k:str, v:object) -> None:
-        self[k] = v
-
-    def __delattr__(self, k:str) -> None:
-        if k in self: del self[k]
-
-
-def snooze(n:int) -> int:
+def snooze(n: int, num_retries: int = 10, delay: float = 10, scaling: float = 1.2) -> float:
     """
     Calculate the delay. The formula is arbitrary, and can
     be changed.
@@ -681,15 +595,11 @@ def snooze(n:int) -> int:
 
     returns -- a number of seconds to delay
     """
-    num_retries = 10
-    delay = 10
-    scaling = 1.2
-
-    if n == num_retries: return None
-    nap = delay * scaling ** n
-    tombstone('Waiting {} seconds to try again.'.format(nap))
-    time.sleep(nap)
-    return nap
+    for attempt in range(n, num_retries):
+        nap = delay * (scaling ** attempt)
+        print(f'Waiting {nap:.2f} seconds to try again.')
+        time.sleep(nap)
+        yield nap
 
 
 def splitter(group:Iterable, num_chunks:int) -> Iterable:
@@ -704,12 +614,11 @@ def splitter(group:Iterable, num_chunks:int) -> Iterable:
     Use:
         for chunk in splitter(group, num_chunks):
             ... do something with chunk ...
-
     """
 
     quotient, remainder = divmod(len(group), num_chunks)
     is_dict = isinstance(group, dict)
-    if is_dict: 
+    if is_dict:
         group = tuple(kvpair for kvpair in group.items())
 
     for i in range(num_chunks):
@@ -723,11 +632,11 @@ def splitter(group:Iterable, num_chunks:int) -> Iterable:
 
 
 def squeal(s: str=None, rectus: bool=True, source=None) -> str:
-    """ The safety pig will appear when there is trouble. """
+    """ The safety goat will appear when there is trouble. """
     tombstone(str)
     return
-
-    for raster in pig:
+    
+    for raster in goat:
         if not rectus:
             print(raster.replace(RED, "").replace(LIGHT_BLUE, "").replace(REVERT, ""))
         else:
@@ -740,53 +649,6 @@ def squeal(s: str=None, rectus: bool=True, source=None) -> str:
             str(s) + " >>>\n")
     tombstone(s)
     return s
-
-
-def stalk_and_kill(process_name:str) -> bool:
-    """
-    This function finds other processes who are named canoed ... and
-    kills them by sending them a SIGTERM.
-
-    returns True or False based on whether we assassinated our 
-        ancestral impostors. If there are none, we return True because
-        in the logical meaning of "we got them all," we did.
-    """
-
-    tombstone('Attempting to remove processes beginning with ' + process_name)
-    # Assume all will go well.
-    got_em = True
-
-    for pid in pids_of(process_name, True):
-        
-        # Be nice about it.
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except:
-            tombstone("Process " + str(pid) + " may have terminated before SIGTERM was sent.")
-            continue
-
-        # wait two seconds
-        time.sleep(2)
-        try:
-            # kill 0 will fail if the process is gone
-            os.kill(pid, 0) 
-        except:
-            tombstone("Process " + str(pid) + " has been terminated.")
-            continue
-        
-        # Darn! It's still running. Let's get serious.
-        os.kill(pid, signal.SIGKILL)
-        time.sleep(2)
-        try:
-            # As above, kill 0 will fail if the process is gone
-            os.kill(pid, 0)
-            tombstone("Process " + str(pid) + " has been killed.")
-        except:
-            continue
-        tombstone(str(pid) + " is obdurate, and will not die.")
-        got_em = False
-    
-    return got_em
 
 
 class Stopwatch:
@@ -810,7 +672,7 @@ class Stopwatch:
         """
         Build the Stopwatch object, and click the start button. For ease of
         use, you can use the text literals 'seconds', 'tenths', 'hundredths',
-        'milli', 'micro', 'deci', 'centi' or any integer as the units. 
+        'milli', 'micro', 'deci', 'centi' or any integer as the units.
 
         'minutes' is also provided if you think this is going to take a while.
 
@@ -820,9 +682,8 @@ class Stopwatch:
             self.units = units if isinstance(units, int) else Stopwatch.conversions[units]
         except:
             self.units = 1000
-
         self.laps = collections.OrderedDict()
-        self.laps['start'] = time.time()    
+        self.laps['start'] = time.time()
 
 
     def start(self) -> float:
@@ -839,8 +700,8 @@ class Stopwatch:
     def lap(self, event:object=None) -> float:
         """
         Click the lap button. If you do not supply a name, then we
-        call this event 'start+n", where n is the number of events 
-        already recorded including start. 
+        call this event 'start+n", where n is the number of events
+        already recorded including start.
 
         returns -- the time you clicked the lap counter.
         """
@@ -851,13 +712,13 @@ class Stopwatch:
             self.laps[event] = time.time()
 
         return self.laps[event]
-    
+
 
     def stop(self) -> float:
         """
         This function is a little different than the others, because
         it is here that we apply the scaling factor, and calc the
-        differences between our laps and the start. 
+        differences between our laps and the start.
 
         returns -- the time you declared stop.
         """
@@ -866,7 +727,7 @@ class Stopwatch:
         for k in self.laps:
             self.laps[k] -= diff
             self.laps[k] *= self.units
-            
+
         return return_value
 
 
@@ -900,130 +761,9 @@ class Stopwatch:
 # T
 ####
 
-def this_function():
-    """ Takes the place of __function__ in other languages. """
-
-    return inspect.stack()[1][3]
-
-
-def this_is_the_time(current_minute:int, schedule:list) -> bool:
-    """
-    returns True if *now* is in the schedule, False otherwise.
-    """
-    
-    t = crontuple_now(current_minute)
-    return ((t.minute in schedule[0]) and
-            (t.hour in schedule[1]) and
-            (t.day in schedule[2]) and
-            (t.month in schedule[3]) and
-            (t.isoweekday() % 7 in schedule[4]))
-
-
-def this_line(level: int=1, invert: bool=True) -> int:
-    """ returns the line from which this function was called.
-
-    level -- generally, this value is one, meaning that we
-    want to use the stack frame that is one-down from where we
-    are. In some cases, the value "2" makes sense. Take a look
-    at CanoeObject.set_error() for an example.
-
-    invert -- Given that the most common use of this function
-    is to generate unique error codes, and that error codes are
-    conventionally negative integers, the default is to return
-    not thisline, but -(thisline)
-    """
-    cf = inspect.stack()[level]
-    f = cf[0]
-    i = inspect.getframeinfo(f)
-    return i.lineno if not invert else (0 - i.lineno)
-
-
-def time_print(s:str) -> None:
-    sys.stderr.write(f"{now_as_string()} :: {s}\n")
-
-
-def time_match(t, set_of_times:list) -> bool:
-    """
-    Determines if the datetime object's parts are all in the corresponding
-    sets of minutes, hours, etc.
-    """
-    return   ((t.minute in set_of_times[0]) and
-              (t.hour in set_of_times[1]) and
-              (t.day in set_of_times[2]) and
-              (t.month in set_of_times[3]) and
-              (t.weekday() in set_of_times[4]))
-
-
-def tombstone(args:Any=None, silent:bool=False) -> str:
-    """
-    Print out a message, data, whatever you pass in, along with
-    a timestamp and the PID of the process making the call. 
-    Along with printing it out, it returns it.
-
-    if silent, we return the formatted string, but do not print.
-    """
-
-    a = " " + now_as_string() + " :: " + str(os.getpid()) + " :: "
-
-    if not silent: sys.stderr.write(a)
-    if isinstance(args, str) and not silent:
-        sys.stderr.write(args + "\n")
-    elif isinstance(args, list) or isinstance(args, dict) and not silent:
-        sys.stderr.write("\n")
-        for _ in args:
-            sys.stderr.write(str(_) + "\n")
-        sys.stderr.write("\n")
-    else:
-        pass
-
-    if not silent: sys.stderr.flush()
-
-    # Return the info for use by CanoeDB.tombstone()
-    return a+str(args)
-    
-
-std_ignore = [ signal.SIGCHLD, signal.SIGHUP, signal.SIGINT, signal.SIGPIPE, signal.SIGUSR1, signal.SIGUSR2 ]
-allow_control_c = [ signal.SIGCHLD, signal.SIGPIPE, signal.SIGUSR1, signal.SIGUSR2 ]
-std_die = [ signal.SIGQUIT, signal.SIGABRT ]
-def trap_signals(ignore_list:list=std_ignore,
-                 die_list:list=std_die):
-    """
-    There is no particular reason for these operations to be in a function,
-    except that if this code moves to Windows it makes sense to isolate
-    them so that they may better recieve the attention of an expert.
-    """
-    global bad_exit
-    atexit.register(bad_exit)
-    for _ in std_ignore: signal.signal(_, signal.SIG_IGN)
-    for _ in std_die: signal.signal(_, bad_exit)
-
-    tombstone("signals hooked.")
-
-
-
-def type_and_text(e:Exception) -> str:
-    """
-    This is not the most effecient code, but by the time this function
-    is called, something has gone wrong and performance is unlikely
-    to be a relevant point of discussion.
-    """
-    exc_type, exc_value, exc_traceback = sys.exc_info()
-    a = traceback.extract_tb(exc_traceback)
-    
-    s = []
-    s.append("Raised " + str(type(e)) + " :: " + str(e))
-    for _ in a:
-        s.append(" at file/line " + 
-            str(_[0]) + "/" + str(_[1]) + 
-            ", in fcn " + str(_[2]))
-
-    return s
-
-
 ####
 # U
 ####
-
 def unwhite(s: str) -> str:
     """ Remove all non-print chars from string. """
     t = []
@@ -1040,16 +780,6 @@ def user_from_uid(uid:int) -> str:
 ####
 # V
 ####
-
-def valid_item_name(s:str) -> bool:
-    """ Determines if s is a valid item name (according to Oracle)
-
-    s -- the string to test. s gets trimmed of white space.
-    returns: - True if this is a valid item name, False otherwise.
-    """
-    return re.match("^[A-Za-z_.]+$", s.strip()) != None
-
-
 def version(full:bool = True) -> str:
     """
     Do our best to determine the git commit ID ....
@@ -1066,46 +796,48 @@ def version(full:bool = True) -> str:
         mods = subprocess.check_output(
             ["git", "status", "--short"],
             universal_newlines=True
-            ) 
-        if mods.strip() != mods: 
+            )
+        if mods.strip() != mods:
             v += (", with these files modified: \n" + str(mods))
     finally:
         return v
-        
+
 
 ####
-# W
+# W X Y Z
 ####
 
-def wall(s: str):
-    """ Send out a notification on the system. """
-    return subprocess.call(['wall "' + s + '"'])
 
+if __name__ == '__main__':
 
-def whereami() -> str:
-    """
-    Primarily to determine if the program is running on the cluster
-    or the webserver, but this function can also return other info.
-    """
-    hostname = socket.gethostname()
-    if hostname == 'spdrweb.richmond.edu': return 'webserver'
-    if hostname == 'spydur.cluster': return 'headnode'
-    if '.cluster' in hostname: return 'computenode'
-    if '.richmond.edu' in hostname: return 'oncampus'
-    return 'offcampus'
+    here       = os.getcwd()
+    progname   = os.path.basename(__file__)[:-3]
+    configfile = f"{here}/{progname}.toml"
+    logfile    = f"{here}/{progname}.log"
+    lockfile   = f"{here}/{progname}.lock"
     
+    parser = argparse.ArgumentParser(prog="linuxutils", 
+        description="What linuxutils does, linuxutils does best.")
 
+    parser.add_argument('--loglevel', type=int, 
+        choices=range(logging.FATAL, logging.NOTSET, -10),
+        default=logging.DEBUG,
+        help=f"Logging level, defaults to {logging.DEBUG}")
 
-def whoami() -> None:
-    """
-    Prints the thread id, and the PID of the console you are currently running.
+    parser.add_argument('-o', '--output', type=str, default="",
+        help="Output file name")
+    
+    parser.add_argument('-z', '--zap', action='store_true', 
+        help="Remove old log file and create a new one.")
 
-    The purpose of this function is to make it clear which process is sending
-    which message in this multi-threaded and multi-processing environment.
-    """
-    tombstone("Thread id is {} and the PID is {}.".format(threading.get_ident(), os.getpid()))
-    tombstone("User is {}, and this CPU is known as {}.".format(me(), socket.gethostname().replace('_','.')))
-    tombstone("$CANOE_HOME is {}.".format(os.environ.get('CANOE_HOME', 'not set')))
-    tombstone("The git commit ID is {}".format(version()))
+    myargs = parser.parse_args()
+    logger = URLogger(logfile=logfile, level=myargs.loglevel)
 
+    try:
+        outfile = sys.stdout if not myargs.output else open(myargs.output, 'w')
+        with contextlib.redirect_stdout(outfile):
+            sys.exit(globals()[f"{progname}_main"](myargs))
+
+    except Exception as e:
+        print(f"Escaped or re-raised exception: {e}")
 

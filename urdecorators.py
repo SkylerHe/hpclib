@@ -15,7 +15,7 @@ preceding it.
 """
 import os
 import sys
-min_py = (3,8)
+min_py = (3,11)
 if sys.version_info < min_py:
     print(f"This program requires Python {min_py[0]}.{min_py[1]}, or higher.")
     sys.exit(os.EX_SOFTWARE)
@@ -36,9 +36,9 @@ import threading
 ###
 try:
     from tabulate import tabulate
-    use_tabulate = True
+    have_tabulate = True
 except ImportError as e:
-    use_tabulate = False
+    have_tabulate = False
 
 
 
@@ -66,8 +66,8 @@ def printvars(f_locals:dict) -> None:
     available, we can print a nice looking table.
     """
 
-    global use_tabulate
-    if use_tabulate:
+    global have_tabulate
+    if have_tabulate:
         ###
         # Note: if tabulate doesn't work or cannot handle
         # our data, then we want to print something. Note
